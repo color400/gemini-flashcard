@@ -460,11 +460,11 @@
         // 取得 API Key，若尚未設定則預設為空字串 ("")
         const apiKey = getApiKey(); 
 
-        // 💡 移除先前的強制阻擋邏輯。
-        // 在「預覽」環境中，空字串會被系統自動補上金鑰並成功執行。
-        // 若部署至外部(如 GitHub)，空字串會導致請求失敗，下方 retry 機制會接手並提示錯誤。
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        // 💡 關鍵修正：動態切換模型名稱
+        // 預覽環境專屬模型為 gemini-2.5-flash-preview-09-2025
+        // 若使用者輸入了自己的 API Key，必須切換到公開可用的穩定版模型 (gemini-1.5-flash)
+        const modelName = apiKey ? "gemini-1.5-flash" : "gemini-2.5-flash-preview-09-2025";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         
         let payload = {
             contents: [{ role: "user", parts: [] }],
@@ -507,13 +507,22 @@
                     body: JSON.stringify(payload)
                 });
                 
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                if (!response.ok) {
+                    const errInfo = await response.json();
+                    console.error("API 回傳錯誤:", errInfo);
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 result = await response.json();
                 break;
             } catch (error) {
                 if (i === 4) {
                     loadingScreen.classList.add('hidden');
-                    showToast("網路連線或 API 發生錯誤，請稍後再試");
+                    // 💡 更明確的錯誤提示
+                    if (apiKey) {
+                        showToast("API 驗證失敗，請檢查您的 API Key 是否正確或額度不足", 4000);
+                    } else {
+                        showToast("網路連線或 API 發生錯誤，請稍後再試", 4000);
+                    }
                     return;
                 }
                 await new Promise(res => setTimeout(res, delays[i]));
