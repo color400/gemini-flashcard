@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英文單字閃卡記憶遊戲</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f3f4f6;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* 3D 翻轉卡片核心 CSS */
+        .scene {
+            width: 100%;
+            height: 50vh;
+            min-height: 250px;
+            max-height: 350px;
+            perspective: 1000px;
+            cursor: pointer;
+        }
+
+        .card {
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+            transform-style: preserve-3d;
+            position: relative;
+        }
+
+        .card.is-flipped {
+            transform: rotateY(180deg);
+        }
+
+        .card__face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 1.5rem;
+            text-align: center;
+            background: white;
+        }
+
+        .card__face--back {
+            transform: rotateY(180deg);
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 2px solid #bae6fd;
+        }
+
+        .action-btn { transition: all 0.2s; }
+        .action-btn:active { transform: scale(0.95); }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop { animation: pop 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div id="app" class="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden relative">
+        
+        <!-- 頂部資訊列 -->
+        <div class="bg-indigo-600 text-white p-4 sm:p-5">
+            <div class="flex justify-between items-center mb-3 sm:mb-4">
+                <h1 class="text-xl font-bold"><i class="fas fa-layer-group mr-2"></i>單字閃卡</h1>
+                <div class="flex items-center space-x-3">
+                    <!-- 重新開始按鈕 -->
+                    <button onclick="restartSession()" class="bg-teal-400 hover:bg-teal-500 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center shadow-inner text-white" title="重新開始本局">
+                        <i class="fas fa-redo-alt"></i>
+                    </button>
+                    <!-- 切換問答模式按鈕 -->
+                    <button onclick="toggleMode()" id="mode-toggle-btn" class="bg-indigo-400 hover:bg-indigo-300 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center shadow-inner text-white" title="切換中英問答">
+                        <i class="fas fa-exchange-alt"></i>
+                    </button>
+                    <!-- 新增單字按鈕 -->
+                    <button onclick="showAddModal()" class="bg-indigo-400 hover:bg-indigo-300 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center shadow-inner text-white" title="新增單字">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                    <!-- 清空字庫按鈕 -->
+                    <button onclick="showClearConfirm()" class="bg-red-400 hover:bg-red-500 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center shadow-inner text-white" title="清空字庫">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 進度條 -->
+            <div class="w-full bg-indigo-900 rounded-full h-2.5 mb-1">
+                <div id="progress-bar" class="bg-green-400 h-2.5 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between text-xs text-indigo-200">
+                <span>已學習: <span id="learned-count">0</span> | 連擊: <span id="streak-count">0</span></span>
+                <span>剩餘: <span id="remaining-count">0</span></span>
+            </div>
+        </div>
+
+        <!-- 遊戲區 -->
+        <div id="game-area" class="p-4 sm:p-6 bg-gray-50">
+            
+            <!-- 閃卡容器 -->
+            <div class="scene mb-4 sm:mb-8" onclick="flipCard()">
+                <div class="card" id="flashcard">
+                    <!-- 卡片正面 -->
+                    <div class="card__face card__face--front">
+                        <div class="text-gray-400 text-xs sm:text-sm mb-2 sm:mb-4"><i class="fas fa-sync-alt mr-1"></i>點擊翻轉</div>
+                        
+                        <h2 id="card-front-title" class="text-4xl sm:text-5xl font-black text-gray-800 tracking-tight break-words text-center px-2 sm:px-4">Loading...</h2>
+                        <p id="card-front-subtitle" class="text-indigo-500 font-medium text-base sm:text-lg mt-1 sm:mt-2"></p>
+                        
+                        <button onclick="speakFront(event)" id="front-speaker" class="mt-2 sm:mt-6 p-2 text-gray-400 hover:text-indigo-600 transition-transform hover:scale-110 focus:outline-none" title="唸出單字">
+                            <i class="fas fa-volume-up text-3xl sm:text-4xl"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- 卡片背面 -->
+                    <div class="card__face card__face--back">
+                        <h3 id="card-back-title" class="text-2xl sm:text-3xl font-bold text-gray-800 break-words text-center px-2 sm:px-4">載入中...</h3>
+                        <p id="card-back-subtitle" class="hidden"></p>
+                        
+                        <button onclick="speakBack(event)" id="back-speaker" class="mt-2 mb-1 sm:mt-4 sm:mb-2 p-2 text-gray-400 hover:text-indigo-600 transition-transform hover:scale-110 focus:outline-none" title="唸出單字">
+                            <i class="fas fa-volume-up text-3xl sm:text-4xl"></i>
+                        </button>
+
+                        <div class="w-full h-px bg-blue-200 mb-2 sm:mb-4 mt-1 sm:mt-2"></div>
+                        <p id="card-example-en" class="text-gray-600 italic mb-1 sm:mb-2 text-sm sm:text-base"></p>
+                        <p id="card-example-tw" class="text-gray-500 text-xs sm:text-sm"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作按鈕 -->
+            <div class="flex justify-between space-x-3 sm:space-x-4">
+                <button onclick="handleAnswer(false)" class="action-btn flex-1 bg-red-100 hover:bg-red-200 text-red-600 font-bold py-3 sm:py-4 rounded-2xl shadow-sm border-2 border-red-200 flex flex-col items-center justify-center transition-colors">
+                    <i class="fas fa-times text-xl sm:text-2xl mb-1"></i>
+                    <span class="text-sm sm:text-base">不認識</span>
+                    <span class="text-[10px] sm:text-xs font-normal opacity-70 mt-1">◀ 左方向鍵</span>
+                </button>
+                
+                <button onclick="handleAnswer(true)" class="action-btn flex-1 bg-green-100 hover:bg-green-200 text-green-600 font-bold py-3 sm:py-4 rounded-2xl shadow-sm border-2 border-green-200 flex flex-col items-center justify-center transition-colors">
+                    <i class="fas fa-check text-xl sm:text-2xl mb-1"></i>
+                    <span class="text-sm sm:text-base">認識</span>
+                    <span class="text-[10px] sm:text-xs font-normal opacity-70 mt-1">右方向鍵 ▶</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 結算畫面 -->
+        <div id="result-screen" class="hidden flex-col items-center justify-center p-8 text-center bg-gray-50 min-h-[450px]">
+            <div class="text-6xl mb-6">🎉</div>
+            <h2 class="text-3xl font-black text-gray-800 mb-2">學習完成！</h2>
+            <p class="text-gray-600 mb-8">你已經成功複習完這組單字了。</p>
+            
+            <div class="bg-indigo-50 p-6 rounded-2xl w-full mb-8">
+                <div class="flex justify-around">
+                    <div>
+                        <div class="text-sm text-gray-500">最高連擊</div>
+                        <div id="final-streak" class="text-2xl font-bold text-orange-500">0</div>
+                    </div>
+                    <div>
+                        <div class="text-sm text-gray-500">總學習單字</div>
+                        <div id="final-total" class="text-2xl font-bold text-indigo-600">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="resetGame()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-lg transition-colors">
+                <i class="fas fa-redo mr-2"></i> 再學習一次
+            </button>
+        </div>
+
+        <!-- 空字庫狀態 -->
+        <div id="empty-state" class="hidden flex-col items-center justify-center p-8 text-center bg-gray-50 min-h-[450px]">
+            <div class="text-6xl mb-6 text-gray-300"><i class="fas fa-box-open"></i></div>
+            <h2 class="text-2xl font-black text-gray-800 mb-2">字庫空空如也</h2>
+            <p class="text-gray-500 mb-8 text-sm">請使用右上角的「+」功能來建立您的閃卡！</p>
+        </div>
+
+        <!-- 新增單字的 Modal -->
+        <div id="add-modal" class="hidden absolute inset-0 bg-black bg-opacity-50 z-50 flex flex-col items-center justify-center p-4">
+            <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+                <div class="bg-indigo-600 p-4 text-white flex justify-between items-center">
+                    <h3 class="font-bold text-lg"><i class="fas fa-plus-circle mr-2"></i>新增單字</h3>
+                    <button onclick="hideAddModal()" class="text-white hover:text-gray-200 transition-colors"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                <div class="p-6">
+                    <p class="text-sm text-gray-600 mb-4">您可以上傳圖片、純文字檔 (.txt)，或直接手動輸入單字。AI 會自動為您生成閃卡！</p>
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm font-bold text-gray-700 mb-2">方式一：上傳檔案</label>
+                        <button onclick="document.getElementById('file-upload').click()" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-2 border-indigo-200 border-dashed font-bold py-3 rounded-xl transition-colors flex justify-center items-center">
+                            <i class="fas fa-cloud-upload-alt mr-2 text-xl"></i> 選擇圖片或 .txt 檔案
+                        </button>
+                        <input type="file" id="file-upload" accept="image/*,.txt,text/plain" class="hidden" onchange="handleFileUpload(event)">
+                    </div>
+
+                    <div class="relative flex py-2 items-center mb-6">
+                        <div class="flex-grow border-t border-gray-300"></div>
+                        <span class="flex-shrink-0 mx-4 text-gray-400 text-sm">或</span>
+                        <div class="flex-grow border-t border-gray-300"></div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">方式二：手動輸入</label>
+                        <textarea id="manual-input-text" rows="3" class="w-full border-2 border-gray-300 rounded-xl p-3 focus:outline-none focus:border-indigo-500 mb-3" placeholder="請輸入單字，例如：&#10;apple&#10;banana (可用換行或逗號分隔)"></textarea>
+                        <button onclick="submitManualInput()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors shadow-md">
+                            <i class="fas fa-magic mr-1"></i> 產生閃卡
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 確認清除的 Modal -->
+        <div id="clear-modal" class="hidden absolute inset-0 bg-black bg-opacity-50 z-50 flex flex-col items-center justify-center p-4">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl">
+                <div class="text-red-500 text-5xl mb-4"><i class="fas fa-exclamation-circle"></i></div>
+                <h3 class="text-xl font-bold text-gray-800 mb-2">確定要清空字庫嗎？</h3>
+                <p class="text-gray-600 mb-6 text-sm">這將會刪除所有單字，且無法復原。</p>
+                <div class="flex space-x-3">
+                    <button onclick="hideClearConfirm()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-xl transition-colors">取消</button>
+                    <button onclick="clearDatabase()" class="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors">確定清空</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI 載入畫面 -->
+        <div id="loading-screen" class="hidden absolute inset-0 bg-white bg-opacity-95 z-50 flex flex-col items-center justify-center p-6 text-center">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-600 mb-4"></div>
+            <h2 class="text-xl font-bold text-gray-800 mb-2">正在分析資料中的單字...</h2>
+            <p class="text-gray-500 text-sm">請稍候，AI 正在為您建立專屬閃卡</p>
+        </div>
+
+        <!-- 提示訊息 (Toast) -->
+        <div id="toast" class="hidden absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-xl shadow-lg z-50 transition-opacity text-center whitespace-normal min-w-[280px] max-w-[90%]">
+            訊息
+        </div>
+
+    </div>
+
+<script>
+    // --- 單字資料庫 ---
+    const vocabularyDatabase = [
+        { word: "resilience", phonetic: "/rɪˈzɪliəns/", translation: "韌性 / 恢復力", exampleEn: "She showed great resilience in the face of difficulties.", exampleTw: "面對困難，她展現出極大的韌性。" },
+        { word: "fascinating", phonetic: "/ˈfæsɪneɪtɪŋ/", translation: "迷人的 / 極有趣的", exampleEn: "The museum has a fascinating collection of ancient artifacts.", exampleTw: "這座博物館收藏了極為迷人的古代文物。" },
+        { word: "procrastinate", phonetic: "/proʊˈkræstɪneɪt/", translation: "拖延", exampleEn: "I always procrastinate when I have a difficult essay to write.", exampleTw: "當我要寫困難的論文時，我總是會拖延。" },
+        { word: "ambiguous", phonetic: "/æmˈbɪɡjuəs/", translation: "模稜兩可的", exampleEn: "His reply to my question was somewhat ambiguous.", exampleTw: "他對我問題的回答有些模稜兩可。" },
+        { word: "diligent", phonetic: "/ˈdɪlɪdʒənt/", translation: "勤奮的", exampleEn: "He is a diligent student who always finishes his homework on time.", exampleTw: "他是個勤奮的學生，總是按時完成作業。" }
+    ];
+
+    // --- 遊戲狀態變數 ---
+    let reviewPile = [];
+    let learnedCount = 0;
+    let totalCards = 0;
+    let currentCard = null;
+    let currentIndex = 0;
+    let isFlipped = false;
+    let isReverseMode = false;
+    let currentStreak = 0;
+    let maxStreak = 0;
+
+    // --- DOM 元素綁定 ---
+    const cardEl = document.getElementById('flashcard');
+    const frontTitleEl = document.getElementById('card-front-title');
+    const frontSubtitleEl = document.getElementById('card-front-subtitle');
+    const backTitleEl = document.getElementById('card-back-title');
+    const backSubtitleEl = document.getElementById('card-back-subtitle');
+    const exampleEnEl = document.getElementById('card-example-en');
+    const exampleTwEl = document.getElementById('card-example-tw');
+    
+    const progressEl = document.getElementById('progress-bar');
+    const learnedCountEl = document.getElementById('learned-count');
+    const remainingCountEl = document.getElementById('remaining-count');
+    const streakCountEl = document.getElementById('streak-count');
+    
+    const gameArea = document.getElementById('game-area');
+    const resultScreen = document.getElementById('result-screen');
+    const emptyState = document.getElementById('empty-state');
+    const clearModal = document.getElementById('clear-modal');
+    const addModal = document.getElementById('add-modal');
+    const loadingScreen = document.getElementById('loading-screen');
+    const loadingTitle = document.querySelector('#loading-screen h2');
+    const toastEl = document.getElementById('toast');
+
+    // --- 重新開始本局 ---
+    function restartSession() {
+        if (vocabularyDatabase.length === 0) {
+            showToast("您的字庫目前是空的喔！", 2000);
+            return;
+        }
+        initGame();
+        showToast("已重新開始本局學習！", 2000);
+    }
+
+    // --- 新增單字選單 (Modal) 控制 ---
+    function showAddModal() {
+        addModal.classList.remove('hidden');
+        addModal.classList.add('flex');
+    }
+
+    function hideAddModal() {
+        addModal.classList.add('hidden');
+        addModal.classList.remove('flex');
+        document.getElementById('manual-input-text').value = '';
+    }
+
+    // --- 清除字庫功能 ---
+    function showClearConfirm() {
+        clearModal.classList.remove('hidden');
+        clearModal.classList.add('flex');
+    }
+
+    function hideClearConfirm() {
+        clearModal.classList.add('hidden');
+        clearModal.classList.remove('flex');
+    }
+
+    function clearDatabase() {
+        vocabularyDatabase.length = 0;
+        hideClearConfirm();
+        showToast("字庫已清空", 3000);
+        initGame();
+    }
+
+    // --- 切換問答模式 ---
+    function toggleMode() {
+        isReverseMode = !isReverseMode;
+        const btn = document.getElementById('mode-toggle-btn');
+        
+        if (isReverseMode) {
+            btn.classList.replace('bg-indigo-400', 'bg-orange-500');
+            btn.classList.replace('hover:bg-indigo-300', 'hover:bg-orange-400');
+            showToast("已切換為：中 ➔ 英", 2000);
+        } else {
+            btn.classList.replace('bg-orange-500', 'bg-indigo-400');
+            btn.classList.replace('hover:bg-orange-400', 'hover:bg-indigo-300');
+            showToast("已切換為：英 ➔ 中", 2000);
+        }
+
+        if (currentCard) {
+            isFlipped = false;
+            cardEl.classList.remove('is-flipped');
+            setTimeout(renderCardContent, 150);
+        }
+    }
+
+    // --- AI 檔案與文字處理功能 ---
+    function showToast(message, duration = 3000) {
+        toastEl.innerText = message;
+        toastEl.classList.remove('hidden');
+        setTimeout(() => toastEl.classList.add('hidden'), duration);
+    }
+
+    async function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        hideAddModal();
+        loadingScreen.classList.remove('hidden');
+        loadingTitle.innerText = "正在分析檔案中的單字...";
+
+        try {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = async () => {
+                    const base64Data = reader.result.split(',')[1];
+                    await processWithGemini({ type: 'image', data: base64Data, mimeType: file.type });
+                };
+            } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+                const reader = new FileReader();
+                reader.readAsText(file);
+                reader.onload = async () => {
+                    await processWithGemini({ type: 'text', text: reader.result });
+                };
+            } else {
+                showToast("不支援的檔案格式，請上傳圖片或 .txt 純文字檔");
+                loadingScreen.classList.add('hidden');
+            }
+        } catch (error) {
+            console.error("處理檔案時發生錯誤:", error);
+            showToast("處理檔案失敗，請重試");
+            loadingScreen.classList.add('hidden');
+        }
+        
+        event.target.value = '';
+    }
+
+    async function submitManualInput() {
+        const text = document.getElementById('manual-input-text').value.trim();
+        if (!text) {
+            showToast("請輸入您要新增的單字");
+            return;
+        }
+        
+        hideAddModal();
+        loadingScreen.classList.remove('hidden');
+        loadingTitle.innerText = "正在為您生成閃卡資料...";
+        
+        await processWithGemini({ type: 'text', text: text });
+    }
+
+    async function processWithGemini(inputData) {
+        const apiKey = ""; // 執行環境會自動提供
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        
+        let payload = {
+            contents: [{ role: "user", parts: [] }],
+            generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "ARRAY",
+                    items: {
+                        type: "OBJECT",
+                        properties: {
+                            word: { type: "STRING" },
+                            phonetic: { type: "STRING" },
+                            translation: { type: "STRING" },
+                            exampleEn: { type: "STRING" },
+                            exampleTw: { type: "STRING" }
+                        },
+                        required: ["word", "phonetic", "translation", "exampleEn", "exampleTw"]
+                    }
+                }
+            }
+        };
+
+        if (inputData.type === 'image') {
+            const promptText = "Extract all prominent and useful English words from this image. Return a JSON array of objects with keys: word (lowercase string), phonetic (string), translation (Traditional Chinese string), exampleEn (English string), exampleTw (Traditional Chinese string). Only output valid JSON.";
+            payload.contents[0].parts.push({ text: promptText });
+            payload.contents[0].parts.push({ inlineData: { mimeType: inputData.mimeType, data: inputData.data } });
+        } else if (inputData.type === 'text') {
+            const promptText = "Process the following English words. Extract the valid English words and for each, provide the phonetic, translation in Traditional Chinese, an English example sentence, and a Traditional Chinese example sentence. Return a JSON array of objects. The words are:\n" + inputData.text;
+            payload.contents[0].parts.push({ text: promptText });
+        }
+
+        const delays = [1000, 2000, 4000, 8000, 16000];
+        let result = null;
+
+        for (let i = 0; i < 5; i++) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                result = await response.json();
+                break;
+            } catch (error) {
+                if (i === 4) {
+                    loadingScreen.classList.add('hidden');
+                    showToast("網路連線或 API 發生錯誤，請稍後再試");
+                    return;
+                }
+                await new Promise(res => setTimeout(res, delays[i]));
+            }
+        }
+
+        try {
+            const textResponse = result.candidates[0].content.parts[0].text;
+            const newWords = JSON.parse(textResponse);
+            
+            if (newWords && newWords.length > 0) {
+                const addedWordsList = [];
+                newWords.forEach(wordObj => {
+                    vocabularyDatabase.push(wordObj);
+                    reviewPile.push(wordObj);
+                    addedWordsList.push(wordObj.word);
+                    totalCards++;
+                });
+                
+                const wordsString = addedWordsList.join(', ');
+                showToast(`成功新增 ${newWords.length} 個單字：\n${wordsString}`, 5000);
+                updateUI();
+                
+                if (!currentCard && reviewPile.length > 0) {
+                    emptyState.classList.add('hidden');
+                    emptyState.classList.remove('flex');
+                    gameArea.classList.remove('hidden');
+                    resultScreen.classList.add('hidden');
+                    resultScreen.classList.remove('flex');
+                    loadNextCard();
+                }
+            } else {
+                showToast("找不到合適的英文單字。");
+            }
+        } catch (parseError) {
+            console.error("解析 API 回傳資料失敗:", parseError);
+            showToast("無法解析內容，請確認輸入是否正確。");
+        } finally {
+            loadingScreen.classList.add('hidden');
+        }
+    }
+
+    // --- 遊戲邏輯 ---
+    function initGame() {
+        reviewPile = shuffleArray(JSON.parse(JSON.stringify(vocabularyDatabase)));
+        totalCards = reviewPile.length;
+        learnedCount = 0;
+        currentStreak = 0;
+        maxStreak = 0;
+        currentCard = null;
+        
+        updateUI();
+
+        if (totalCards === 0) {
+            gameArea.classList.add('hidden');
+            resultScreen.classList.add('hidden');
+            resultScreen.classList.remove('flex');
+            emptyState.classList.remove('hidden');
+            emptyState.classList.add('flex');
+            return;
+        }
+
+        emptyState.classList.add('hidden');
+        emptyState.classList.remove('flex');
+        gameArea.classList.remove('hidden');
+        resultScreen.classList.add('hidden');
+        resultScreen.classList.remove('flex');
+        
+        loadNextCard();
+    }
+
+    function loadNextCard() {
+        if (reviewPile.length === 0) {
+            showResult();
+            return;
+        }
+
+        let randomIndex;
+        if (reviewPile.length > 1 && currentCard) {
+            do {
+                randomIndex = Math.floor(Math.random() * reviewPile.length);
+            } while (reviewPile[randomIndex].word === currentCard.word);
+        } else {
+            randomIndex = Math.floor(Math.random() * reviewPile.length);
+        }
+
+        currentIndex = randomIndex;
+        currentCard = reviewPile[currentIndex];
+        isFlipped = false;
+        cardEl.classList.remove('is-flipped');
+
+        setTimeout(() => {
+            renderCardContent();
+        }, 150);
+    }
+
+    function renderCardContent() {
+        if (!currentCard) return;
+
+        if (!isReverseMode) {
+            frontTitleEl.innerText = currentCard.word;
+            frontTitleEl.className = "text-4xl sm:text-5xl font-black text-gray-800 tracking-tight break-words text-center px-2 sm:px-4";
+            frontSubtitleEl.innerText = currentCard.phonetic;
+            frontSubtitleEl.className = "text-indigo-500 font-medium text-base sm:text-lg block mt-1 sm:mt-2";
+            
+            backTitleEl.innerText = currentCard.translation;
+            backTitleEl.className = "text-2xl sm:text-3xl font-bold text-gray-800 break-words text-center px-2 sm:px-4";
+            backSubtitleEl.innerText = "";
+            backSubtitleEl.className = "hidden";
+        } else {
+            frontTitleEl.innerText = currentCard.translation;
+            frontTitleEl.className = "text-3xl sm:text-4xl font-bold text-gray-800 break-words text-center px-2 sm:px-4";
+            frontSubtitleEl.innerText = "";
+            frontSubtitleEl.className = "hidden";
+
+            backTitleEl.innerText = currentCard.word;
+            backTitleEl.className = "text-3xl sm:text-4xl font-black text-indigo-600 tracking-tight break-words text-center px-2 sm:px-4";
+            backSubtitleEl.innerText = currentCard.phonetic;
+            backSubtitleEl.className = "text-gray-500 font-medium text-sm sm:text-base mt-1 sm:mt-2 block";
+        }
+
+        exampleEnEl.innerText = `"${currentCard.exampleEn}"`;
+        exampleTwEl.innerText = currentCard.exampleTw;
+    }
+
+    function flipCard() {
+        isFlipped = !isFlipped;
+        if (isFlipped) cardEl.classList.add('is-flipped');
+        else cardEl.classList.remove('is-flipped');
+    }
+
+    function handleAnswer(knowsWord) {
+        if (!currentCard) return;
+        if (!isFlipped) { flipCard(); return; }
+
+        const cardToProcess = reviewPile.splice(currentIndex, 1)[0];
+
+        if (knowsWord) {
+            learnedCount++;
+            currentStreak++;
+            if (currentStreak > maxStreak) maxStreak = currentStreak;
+        } else {
+            reviewPile.push(cardToProcess);
+            currentStreak = 0;
+        }
+
+        updateUI();
+        setTimeout(() => { loadNextCard(); }, 150);
+    }
+
+    function updateUI() {
+        learnedCountEl.innerText = learnedCount;
+        remainingCountEl.innerText = reviewPile.length;
+        streakCountEl.innerText = currentStreak;
+        
+        const progressPercentage = totalCards === 0 ? 0 : (learnedCount / totalCards) * 100;
+        progressEl.style.width = `${progressPercentage}%`;
+    }
+
+    function showResult() {
+        gameArea.classList.add('hidden');
+        resultScreen.classList.remove('hidden');
+        resultScreen.classList.add('flex');
+        document.getElementById('final-streak').innerText = maxStreak;
+        document.getElementById('final-total').innerText = totalCards;
+    }
+
+    function resetGame() { initGame(); }
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    // --- 語音朗讀功能 ---
+    function speakFront(event) {
+        if (event) event.stopPropagation();
+        if (!currentCard) return;
+        const text = isReverseMode ? currentCard.translation : currentCard.word;
+        const lang = isReverseMode ? 'zh-TW' : 'en-US';
+        speak(text, lang);
+    }
+
+    function speakBack(event) {
+        if (event) event.stopPropagation();
+        if (!currentCard) return;
+        const text = isReverseMode ? currentCard.word : currentCard.translation;
+        const lang = isReverseMode ? 'en-US' : 'zh-TW';
+        speak(text, lang);
+    }
+
+    function speak(text, lang) {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = lang;
+            if (lang === 'en-US') utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+        } else {
+            showToast("您的瀏覽器不支援語音功能", 2000);
+        }
+    }
+
+    // --- 鍵盤快捷鍵綁定 ---
+    document.addEventListener('keydown', (event) => {
+        // 如果使用者正在輸入框內打字，不觸發任何快捷鍵
+        if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
+            return;
+        }
+
+        if (!resultScreen.classList.contains('hidden')) {
+            if (event.code === 'Enter') resetGame();
+            return;
+        }
+
+        switch (event.code) {
+            case 'ArrowUp':
+            case 'ArrowDown':
+                event.preventDefault();
+                flipCard();
+                break;
+            case 'ArrowLeft':
+                if (isFlipped) handleAnswer(false);
+                break;
+            case 'ArrowRight':
+                if (isFlipped) handleAnswer(true);
+                break;
+        }
+    });
+
+    window.onload = initGame;
+
+</script>
+</body>
+</html>
