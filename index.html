@@ -94,6 +94,10 @@
                     <button onclick="showClearConfirm()" class="bg-red-400 hover:bg-red-500 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center shadow-inner text-white" title="清空字庫">
                         <i class="fas fa-trash"></i>
                     </button>
+                    <!-- 設定 API Key 按鈕 -->
+                    <button onclick="showSettingsModal()" class="bg-gray-700 hover:bg-gray-800 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center shadow-inner text-white" title="設定 API Key">
+                        <i class="fas fa-cog"></i>
+                    </button>
                 </div>
             </div>
             
@@ -236,6 +240,22 @@
             </div>
         </div>
 
+        <!-- 設定 API Key 的 Modal -->
+        <div id="settings-modal" class="hidden absolute inset-0 bg-black bg-opacity-50 z-50 flex flex-col items-center justify-center p-4">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-key text-yellow-500 mr-2"></i>設定 API Key</h3>
+                    <button onclick="hideSettingsModal()" class="text-gray-400 hover:text-gray-600 transition-colors"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                <p class="text-gray-600 mb-4 text-sm">請輸入您的 Google Gemini API Key 以啟用 AI 單字解析功能。金鑰將安全地儲存在您的瀏覽器中，不會傳送到其他地方。</p>
+                <input type="password" id="api-key-input" class="w-full border-2 border-gray-300 rounded-xl p-3 focus:outline-none focus:border-indigo-500 mb-6" placeholder="AIzaSy...">
+                <div class="flex space-x-3">
+                    <button onclick="hideSettingsModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-xl transition-colors">取消</button>
+                    <button onclick="saveApiKey()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors">儲存</button>
+                </div>
+            </div>
+        </div>
+
         <!-- AI 載入畫面 -->
         <div id="loading-screen" class="hidden absolute inset-0 bg-white bg-opacity-95 z-50 flex flex-col items-center justify-center p-6 text-center">
             <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-600 mb-4"></div>
@@ -290,9 +310,33 @@
     const emptyState = document.getElementById('empty-state');
     const clearModal = document.getElementById('clear-modal');
     const addModal = document.getElementById('add-modal');
+    const settingsModal = document.getElementById('settings-modal');
     const loadingScreen = document.getElementById('loading-screen');
     const loadingTitle = document.querySelector('#loading-screen h2');
     const toastEl = document.getElementById('toast');
+
+    // --- API Key 設定功能 ---
+    function getApiKey() {
+        return localStorage.getItem('gemini_api_key') || '';
+    }
+
+    function showSettingsModal() {
+        document.getElementById('api-key-input').value = getApiKey();
+        settingsModal.classList.remove('hidden');
+        settingsModal.classList.add('flex');
+    }
+
+    function hideSettingsModal() {
+        settingsModal.classList.add('hidden');
+        settingsModal.classList.remove('flex');
+    }
+
+    function saveApiKey() {
+        const key = document.getElementById('api-key-input').value.trim();
+        localStorage.setItem('gemini_api_key', key);
+        hideSettingsModal();
+        showToast("API Key 已儲存", 2000);
+    }
 
     // --- 重新開始本局 ---
     function restartSession() {
@@ -413,7 +457,13 @@
     }
 
     async function processWithGemini(inputData) {
-        const apiKey = ""; // 執行環境會自動提供
+        // 取得 API Key，若尚未設定則預設為空字串 ("")
+        const apiKey = getApiKey(); 
+
+        // 💡 移除先前的強制阻擋邏輯。
+        // 在「預覽」環境中，空字串會被系統自動補上金鑰並成功執行。
+        // 若部署至外部(如 GitHub)，空字串會導致請求失敗，下方 retry 機制會接手並提示錯誤。
+
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
         
         let payload = {
