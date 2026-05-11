@@ -557,12 +557,13 @@
         });
         showToast(`成功新增 ${newWords.length} 個單字：\n${addedList.join(', ')}`, 5000);
         updateUI();
-        if (!currentCard && reviewPile.length > 0) {
+        // 若遊戲區隱藏中（結算畫面或空字庫狀態），自動切回遊戲
+        if (gameArea.classList.contains('hidden') && reviewPile.length > 0) {
             emptyState.classList.add('hidden');
             emptyState.classList.remove('flex');
-            gameArea.classList.remove('hidden');
             resultScreen.classList.add('hidden');
             resultScreen.classList.remove('flex');
+            gameArea.classList.remove('hidden');
             loadNextCard();
         }
     }
