@@ -610,35 +610,9 @@
             const entry = data[0];
             const phonetic = entry.phonetic || entry.phonetics?.find(p => p.text)?.text || `/${word}/`;
 
-            let exampleEn = '';
-            let firstDef = '';
-            for (const meaning of entry.meanings || []) {
-                for (const def of meaning.definitions || []) {
-                    if (!firstDef) firstDef = def.definition;
-                    if (!exampleEn && def.example) exampleEn = def.example;
-                    if (firstDef && exampleEn) break;
-                }
-                if (firstDef && exampleEn) break;
-            }
-            if (!exampleEn && firstDef) {
-                const pos = entry.meanings?.[0]?.partOfSpeech;
-                const def = firstDef.charAt(0).toLowerCase() + firstDef.slice(1).replace(/\.$/, '');
-                const article = /^[aeiou]/i.test(word) ? 'An' : 'A';
-                if (pos === 'verb') {
-                    exampleEn = `To ${word} means to ${def}.`;
-                } else if (pos === 'adjective' || pos === 'adverb') {
-                    exampleEn = `Being ${word} means ${def}.`;
-                } else {
-                    exampleEn = `${article} ${word} is ${def}.`;
-                }
-            }
+            const translation = await translateToZhTW(word);
 
-            const [translation, exampleTw] = await Promise.all([
-                translateToZhTW(word),
-                translateToZhTW(exampleEn)
-            ]);
-
-            return { word: word.toLowerCase(), phonetic, translation, exampleEn, exampleTw };
+            return { word: word.toLowerCase(), phonetic, translation, exampleEn: '', exampleTw: '' };
         } catch (e) {
             console.error(`查詢 ${word} 失敗:`, e);
             return null;
@@ -759,8 +733,15 @@
             backSubtitleEl.className = "text-gray-500 font-medium text-sm sm:text-base mt-1 sm:mt-2 block";
         }
 
-        exampleEnEl.innerText = `"${currentCard.exampleEn}"`;
-        exampleTwEl.innerText = currentCard.exampleTw;
+        const hasExample = !!currentCard.exampleEn;
+        const divider = exampleEnEl.previousElementSibling;
+        divider.classList.toggle('hidden', !hasExample);
+        exampleEnEl.classList.toggle('hidden', !hasExample);
+        exampleTwEl.classList.toggle('hidden', !hasExample);
+        if (hasExample) {
+            exampleEnEl.innerText = `"${currentCard.exampleEn}"`;
+            exampleTwEl.innerText = currentCard.exampleTw;
+        }
     }
 
     function flipCard() {
