@@ -620,7 +620,18 @@
                 }
                 if (firstDef && exampleEn) break;
             }
-            if (!exampleEn) exampleEn = `She used the word "${word}" correctly in her essay.`;
+            if (!exampleEn && firstDef) {
+                const pos = entry.meanings?.[0]?.partOfSpeech;
+                const def = firstDef.charAt(0).toLowerCase() + firstDef.slice(1).replace(/\.$/, '');
+                const article = /^[aeiou]/i.test(word) ? 'An' : 'A';
+                if (pos === 'verb') {
+                    exampleEn = `To ${word} means to ${def}.`;
+                } else if (pos === 'adjective' || pos === 'adverb') {
+                    exampleEn = `Being ${word} means ${def}.`;
+                } else {
+                    exampleEn = `${article} ${word} is ${def}.`;
+                }
+            }
 
             const [translation, exampleTw] = await Promise.all([
                 translateToZhTW(word),
