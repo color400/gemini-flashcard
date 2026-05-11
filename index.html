@@ -623,7 +623,7 @@
             if (!exampleEn) exampleEn = `She used the word "${word}" correctly in her essay.`;
 
             const [translation, exampleTw] = await Promise.all([
-                translateToZhTW(firstDef || word),
+                translateToZhTW(word),
                 translateToZhTW(exampleEn)
             ]);
 
