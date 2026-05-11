@@ -420,14 +420,15 @@
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
                 reader.onload = async () => {
-                    const base64Data = reader.result.split(',')[1];
-                    await processWithGemini({ type: 'image', data: base64Data, mimeType: file.type });
+                    const inputData = { type: 'image', data: reader.result.split(',')[1], mimeType: file.type };
+                    getApiKey() ? await processWithGemini(inputData) : await processWithFreeAPIs(inputData);
                 };
             } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
                 const reader = new FileReader();
                 reader.readAsText(file);
                 reader.onload = async () => {
-                    await processWithGemini({ type: 'text', text: reader.result });
+                    const inputData = { type: 'text', text: reader.result };
+                    getApiKey() ? await processWithGemini(inputData) : await processWithFreeAPIs(inputData);
                 };
             } else {
                 showToast("不支援的檔案格式，請上傳圖片或 .txt 純文字檔");
@@ -438,7 +439,7 @@
             showToast("處理檔案失敗，請重試");
             loadingScreen.classList.add('hidden');
         }
-        
+
         event.target.value = '';
     }
 
@@ -448,12 +449,13 @@
             showToast("請輸入您要新增的單字");
             return;
         }
-        
+
         hideAddModal();
         loadingScreen.classList.remove('hidden');
         loadingTitle.innerText = "正在為您生成閃卡資料...";
-        
-        await processWithGemini({ type: 'text', text: text });
+
+        const inputData = { type: 'text', text };
+        getApiKey() ? await processWithGemini(inputData) : await processWithFreeAPIs(inputData);
     }
 
     async function processWithGemini(inputData) {
@@ -531,35 +533,134 @@
 
         try {
             const textResponse = result.candidates[0].content.parts[0].text;
-            const newWords = JSON.parse(textResponse);
-            
-            if (newWords && newWords.length > 0) {
-                const addedWordsList = [];
-                newWords.forEach(wordObj => {
-                    vocabularyDatabase.push(wordObj);
-                    reviewPile.push(wordObj);
-                    addedWordsList.push(wordObj.word);
-                    totalCards++;
-                });
-                
-                const wordsString = addedWordsList.join(', ');
-                showToast(`成功新增 ${newWords.length} 個單字：\n${wordsString}`, 5000);
-                updateUI();
-                
-                if (!currentCard && reviewPile.length > 0) {
-                    emptyState.classList.add('hidden');
-                    emptyState.classList.remove('flex');
-                    gameArea.classList.remove('hidden');
-                    resultScreen.classList.add('hidden');
-                    resultScreen.classList.remove('flex');
-                    loadNextCard();
-                }
-            } else {
-                showToast("找不到合適的英文單字。");
-            }
+            addWordsToGame(JSON.parse(textResponse));
         } catch (parseError) {
             console.error("解析 API 回傳資料失敗:", parseError);
             showToast("無法解析內容，請確認輸入是否正確。");
+        } finally {
+            loadingScreen.classList.add('hidden');
+        }
+    }
+
+    // --- 共用：將新單字加入遊戲 ---
+    function addWordsToGame(newWords) {
+        if (!newWords || newWords.length === 0) {
+            showToast("找不到合適的英文單字。");
+            return;
+        }
+        const addedList = [];
+        newWords.forEach(wordObj => {
+            vocabularyDatabase.push(wordObj);
+            reviewPile.push(wordObj);
+            addedList.push(wordObj.word);
+            totalCards++;
+        });
+        showToast(`成功新增 ${newWords.length} 個單字：\n${addedList.join(', ')}`, 5000);
+        updateUI();
+        if (!currentCard && reviewPile.length > 0) {
+            emptyState.classList.add('hidden');
+            emptyState.classList.remove('flex');
+            gameArea.classList.remove('hidden');
+            resultScreen.classList.add('hidden');
+            resultScreen.classList.remove('flex');
+            loadNextCard();
+        }
+    }
+
+    // --- 免費路徑：Free Dictionary API + MyMemory + Tesseract.js ---
+    function extractEnglishWords(text) {
+        const words = text.toLowerCase()
+            .split(/[\s,，\n\r;；、]+/)
+            .map(w => w.replace(/[^a-z'-]/g, '').trim())
+            .filter(w => w.length > 1 && /^[a-z]/.test(w));
+        return [...new Set(words)];
+    }
+
+    async function loadTesseract() {
+        if (window.Tesseract) return;
+        await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+            s.onload = resolve;
+            s.onerror = reject;
+            document.head.appendChild(s);
+        });
+    }
+
+    async function translateToZhTW(text) {
+        try {
+            const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|zh-TW`);
+            const data = await res.json();
+            const translated = data.responseData?.translatedText;
+            return (translated && translated !== text) ? translated : text;
+        } catch {
+            return text;
+        }
+    }
+
+    async function fetchWordData(word) {
+        try {
+            const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+            if (!res.ok) return null;
+
+            const data = await res.json();
+            const entry = data[0];
+            const phonetic = entry.phonetic || entry.phonetics?.find(p => p.text)?.text || `/${word}/`;
+
+            let exampleEn = '';
+            let firstDef = '';
+            for (const meaning of entry.meanings || []) {
+                for (const def of meaning.definitions || []) {
+                    if (!firstDef) firstDef = def.definition;
+                    if (!exampleEn && def.example) exampleEn = def.example;
+                    if (firstDef && exampleEn) break;
+                }
+                if (firstDef && exampleEn) break;
+            }
+            if (!exampleEn) exampleEn = `She used the word "${word}" correctly in her essay.`;
+
+            const [translation, exampleTw] = await Promise.all([
+                translateToZhTW(firstDef || word),
+                translateToZhTW(exampleEn)
+            ]);
+
+            return { word: word.toLowerCase(), phonetic, translation, exampleEn, exampleTw };
+        } catch (e) {
+            console.error(`查詢 ${word} 失敗:`, e);
+            return null;
+        }
+    }
+
+    async function processWithFreeAPIs(inputData) {
+        try {
+            let words = [];
+
+            if (inputData.type === 'image') {
+                loadingTitle.innerText = "正在辨識圖片文字 (OCR)...";
+                await loadTesseract();
+                const result = await Tesseract.recognize(`data:${inputData.mimeType};base64,${inputData.data}`, 'eng', { logger: () => {} });
+                words = extractEnglishWords(result.data.text);
+            } else {
+                words = extractEnglishWords(inputData.text);
+            }
+
+            if (words.length === 0) {
+                showToast("找不到有效的英文單字，請確認輸入內容");
+                loadingScreen.classList.add('hidden');
+                return;
+            }
+
+            const newWords = [];
+            for (let i = 0; i < words.length; i++) {
+                loadingTitle.innerText = `正在查詢單字 (${i + 1}/${words.length})...`;
+                const card = await fetchWordData(words[i]);
+                if (card) newWords.push(card);
+            }
+
+            addWordsToGame(newWords);
+        } catch (error) {
+            console.error("免費查詢失敗:", error);
+            showToast("查詢失敗，請確認網路連線後重試", 4000);
         } finally {
             loadingScreen.classList.add('hidden');
         }
