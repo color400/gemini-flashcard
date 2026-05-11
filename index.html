@@ -498,37 +498,36 @@
             payload.contents[0].parts.push({ text: promptText });
         }
 
-        const delays = [1000, 2000, 4000, 8000, 16000];
+        const delays = [1000, 2000, 4000];
         let result = null;
 
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i <= delays.length; i++) {
             try {
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                
+
                 if (!response.ok) {
                     const errInfo = await response.json();
-                    console.error("API 回傳錯誤:", errInfo);
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    console.warn("Gemini API 錯誤:", errInfo);
+                    // 認證失敗或額度超限時不重試，直接 fallback
+                    if (response.status === 401 || response.status === 403 || response.status === 429) break;
+                    throw new Error(`HTTP ${response.status}`);
                 }
                 result = await response.json();
                 break;
             } catch (error) {
-                if (i === 4) {
-                    loadingScreen.classList.add('hidden');
-                    // 💡 更明確的錯誤提示
-                    if (apiKey) {
-                        showToast("API 驗證失敗，請檢查您的 API Key 是否正確或額度不足", 4000);
-                    } else {
-                        showToast("網路連線或 API 發生錯誤，請稍後再試", 4000);
-                    }
-                    return;
-                }
+                if (i === delays.length) break;
                 await new Promise(res => setTimeout(res, delays[i]));
             }
+        }
+
+        if (!result) {
+            loadingTitle.innerText = "切換為免費查詢模式...";
+            await processWithFreeAPIs(inputData);
+            return;
         }
 
         try {
