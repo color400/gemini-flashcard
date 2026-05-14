@@ -464,8 +464,8 @@
 
         // 💡 關鍵修正：動態切換模型名稱
         // 預覽環境專屬模型為 gemini-2.5-flash-preview-09-2025
-        // 若使用者輸入了自己的 API Key，必須切換到公開可用的穩定版模型 (gemini-1.5-flash)
-        const modelName = apiKey ? "gemini-1.5-flash" : "gemini-2.5-flash-preview-09-2025";
+        // 若使用者輸入了自己的 API Key，必須切換到公開可用的穩定版模型 (gemini-1.5-flash) gemini-flash-latest
+        const modelName = apiKey ? "gemini-flash-latest" : "gemini-2.5-flash-preview-09-2025";
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         
         let payload = {
