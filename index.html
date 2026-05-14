@@ -95,8 +95,9 @@
                         <i class="fas fa-trash"></i>
                     </button>
                     <!-- 設定 API Key 按鈕 -->
-                    <button onclick="showSettingsModal()" class="bg-gray-700 hover:bg-gray-800 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center shadow-inner text-white" title="設定 API Key">
+                    <button id="settings-btn" onclick="showSettingsModal()" class="bg-gray-700 hover:bg-gray-800 px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center shadow-inner text-white relative" title="設定 API Key">
                         <i class="fas fa-cog"></i>
+                        <span id="api-key-dot" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-yellow-400 rounded-full border-2 border-gray-700"></span>
                     </button>
                 </div>
             </div>
@@ -244,14 +245,52 @@
         <div id="settings-modal" class="hidden absolute inset-0 bg-black bg-opacity-50 z-50 flex flex-col items-center justify-center p-4">
             <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-key text-yellow-500 mr-2"></i>設定 API Key</h3>
+                    <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-key text-yellow-500 mr-2"></i>設定 Gemini API Key</h3>
                     <button onclick="hideSettingsModal()" class="text-gray-400 hover:text-gray-600 transition-colors"><i class="fas fa-times text-xl"></i></button>
                 </div>
-                <p class="text-gray-600 mb-4 text-sm">請輸入您的 Google Gemini API Key 以啟用 AI 單字解析功能。金鑰將安全地儲存在您的瀏覽器中，不會傳送到其他地方。</p>
-                <input type="password" id="api-key-input" class="w-full border-2 border-gray-300 rounded-xl p-3 focus:outline-none focus:border-indigo-500 mb-6" placeholder="AIzaSy...">
+
+                <!-- 如何取得 API Key 的步驟 -->
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+                    <p class="text-blue-800 font-semibold text-xs mb-2"><i class="fas fa-info-circle mr-1"></i>如何取得免費 API Key？</p>
+                    <ol class="text-blue-700 text-xs space-y-1 list-none">
+                        <li><span class="font-bold mr-1">1.</span>前往 <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline font-semibold hover:text-blue-900">Google AI Studio</a></li>
+                        <li><span class="font-bold mr-1">2.</span>登入 Google 帳號</li>
+                        <li><span class="font-bold mr-1">3.</span>點選「Get API key」→「Create API key」</li>
+                        <li><span class="font-bold mr-1">4.</span>複製金鑰後貼到下方輸入框</li>
+                    </ol>
+                </div>
+
+                <p class="text-gray-500 mb-3 text-xs">金鑰將安全地存在您的瀏覽器中，不會傳送到其他地方。</p>
+                <div class="relative mb-5">
+                    <input type="password" id="api-key-input" class="w-full border-2 border-gray-300 rounded-xl p-3 pr-10 focus:outline-none focus:border-indigo-500 text-sm font-mono" placeholder="AIzaSy...">
+                    <button type="button" onclick="toggleApiKeyVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <i id="api-key-eye" class="fas fa-eye text-sm"></i>
+                    </button>
+                </div>
                 <div class="flex space-x-3">
                     <button onclick="hideSettingsModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-xl transition-colors">取消</button>
                     <button onclick="saveApiKey()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors">儲存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Key 錯誤提示 Modal -->
+        <div id="api-error-modal" class="hidden absolute inset-0 bg-black bg-opacity-60 z-50 flex flex-col items-center justify-center p-4">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-3">
+                        <i class="fas fa-key text-red-500 text-2xl"></i>
+                    </div>
+                    <h3 id="api-error-title" class="text-xl font-bold text-gray-800 mb-1">API Key 無效</h3>
+                    <p id="api-error-desc" class="text-gray-600 text-sm">您的 Gemini API Key 已失效或額度用盡，請重新取得。</p>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5 text-sm text-amber-800">
+                    <p class="font-semibold mb-1"><i class="fas fa-circle-exclamation mr-1"></i>如何取得新的 API Key？</p>
+                    <p>前往 <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline font-semibold hover:text-amber-900">Google AI Studio</a>，點選「Create API key」取得免費金鑰，再回來更新設定。</p>
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="hideApiErrorModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-xl transition-colors text-sm">繼續（免費模式）</button>
+                    <button onclick="hideApiErrorModal(); showSettingsModal()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors text-sm"><i class="fas fa-key mr-1"></i>更新 Key</button>
                 </div>
             </div>
         </div>
@@ -290,6 +329,7 @@
     let isReverseMode = false;
     let currentStreak = 0;
     let maxStreak = 0;
+    let apiErrorType = null;
 
     // --- DOM 元素綁定 ---
     const cardEl = document.getElementById('flashcard');
@@ -320,8 +360,33 @@
         return localStorage.getItem('gemini_api_key') || '';
     }
 
+    function updateApiKeyDot() {
+        const dot = document.getElementById('api-key-dot');
+        if (!dot) return;
+        if (!getApiKey()) {
+            dot.classList.remove('hidden');
+        } else {
+            dot.classList.add('hidden');
+        }
+    }
+
+    function toggleApiKeyVisibility() {
+        const input = document.getElementById('api-key-input');
+        const eye = document.getElementById('api-key-eye');
+        if (input.type === 'password') {
+            input.type = 'text';
+            eye.className = 'fas fa-eye-slash text-sm';
+        } else {
+            input.type = 'password';
+            eye.className = 'fas fa-eye text-sm';
+        }
+    }
+
     function showSettingsModal() {
-        document.getElementById('api-key-input').value = getApiKey();
+        const input = document.getElementById('api-key-input');
+        input.type = 'password';
+        document.getElementById('api-key-eye').className = 'fas fa-eye text-sm';
+        input.value = getApiKey();
         settingsModal.classList.remove('hidden');
         settingsModal.classList.add('flex');
     }
@@ -335,7 +400,29 @@
         const key = document.getElementById('api-key-input').value.trim();
         localStorage.setItem('gemini_api_key', key);
         hideSettingsModal();
-        showToast("API Key 已儲存", 2000);
+        updateApiKeyDot();
+        showToast(key ? "API Key 已儲存，將使用 Gemini 進行解析" : "API Key 已清除，將使用免費模式", 2500);
+    }
+
+    function showApiErrorModal(type) {
+        const modal = document.getElementById('api-error-modal');
+        const title = document.getElementById('api-error-title');
+        const desc = document.getElementById('api-error-desc');
+        if (type === 'quota') {
+            title.textContent = 'API 額度已用盡';
+            desc.textContent = '您的 Gemini API Key 今日免費額度已用完，請明日再試或取得新的 Key。';
+        } else {
+            title.textContent = 'API Key 無效';
+            desc.textContent = '您的 Gemini API Key 已失效或格式不正確，請重新取得。';
+        }
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function hideApiErrorModal() {
+        const modal = document.getElementById('api-error-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
     }
 
     // --- 重新開始本局 ---
@@ -512,8 +599,14 @@
                 if (!response.ok) {
                     const errInfo = await response.json();
                     console.warn("Gemini API 錯誤:", errInfo);
-                    // 認證失敗或額度超限時不重試，直接 fallback
-                    if (response.status === 401 || response.status === 403 || response.status === 429) break;
+                    if (response.status === 401 || response.status === 403) {
+                        apiErrorType = 'invalid';
+                        break;
+                    }
+                    if (response.status === 429) {
+                        apiErrorType = 'quota';
+                        break;
+                    }
                     throw new Error(`HTTP ${response.status}`);
                 }
                 result = await response.json();
@@ -527,6 +620,10 @@
         if (!result) {
             loadingTitle.innerText = "切換為免費查詢模式...";
             await processWithFreeAPIs(inputData);
+            if (apiErrorType) {
+                showApiErrorModal(apiErrorType);
+                apiErrorType = null;
+            }
             return;
         }
 
@@ -852,7 +949,7 @@
         }
     });
 
-    window.onload = initGame;
+    window.onload = () => { initGame(); updateApiKeyDot(); };
 
 </script>
 </body>
